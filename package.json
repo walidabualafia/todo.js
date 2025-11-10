@@ -1,14 +1,31 @@
 {
   "name": "todo-app",
   "version": "1.0.0",
-  "description": "Simple todo application",
+  "description": "A modern, Slack-inspired todo application with deadlines, subtasks, and smart filtering",
   "main": "server.js",
   "scripts": {
     "start": "npm run cleanup && node server.js",
     "cleanup": "lsof -ti:8097 | xargs kill -9 2>/dev/null || true",
     "dev": "npm start"
   },
-  "keywords": ["todo"],
-  "author": "",
-  "license": "ISC"
+  "keywords": [
+    "todo",
+    "task-manager",
+    "productivity",
+    "vanilla-javascript",
+    "slack-ui"
+  ],
+  "author": "walid",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/walidabualafia/todo.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/walidabualafia/todo.js/issues"
+  },
+  "homepage": "https://github.com/walidabualafia/todo.js#readme",
+  "engines": {
+    "node": ">=12.0.0"
+  }
 }
