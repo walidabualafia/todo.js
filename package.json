@@ -1,0 +1,14 @@
+{
+  "name": "todo-app",
+  "version": "1.0.0",
+  "description": "Simple todo application",
+  "main": "server.js",
+  "scripts": {
+    "start": "npm run cleanup && node server.js",
+    "cleanup": "lsof -ti:8097 | xargs kill -9 2>/dev/null || true",
+    "dev": "npm start"
+  },
+  "keywords": ["todo"],
+  "author": "",
+  "license": "ISC"
+}
