@@ -1,76 +1,116 @@
 import bcrypt from 'bcrypt';
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import pg from 'pg';
+const { Pool } = pg;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-// Create or open the database
-const db = new Database(join(__dirname, 'bloom.db'));
+// Initialize database tables
+async function initializeDatabase() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        is_admin INTEGER DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+      CREATE TABLE IF NOT EXISTS projects (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        creator_id INTEGER NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        FOREIGN KEY (creator_id) REFERENCES users(id)
+      );
 
-// Create tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    is_admin INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL
-  );
+      CREATE TABLE IF NOT EXISTS todos (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        deadline TIMESTAMP,
+        creator_id INTEGER NOT NULL,
+        project_id INTEGER,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        FOREIGN KEY (creator_id) REFERENCES users(id),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+      );
 
-  CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT,
-    creator_id INTEGER NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (creator_id) REFERENCES users(id)
-  );
+      CREATE TABLE IF NOT EXISTS project_members (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(project_id, user_id)
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS todos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'pending',
-    deadline TEXT,
-    creator_id INTEGER NOT NULL,
-    project_id INTEGER,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (creator_id) REFERENCES users(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
-  );
+    // Add is_admin column if it doesn't exist (migration for existing databases)
+    try {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0`);
+      console.log('Ensured is_admin column exists');
+    } catch (error) {
+      // Column already exists, ignore error
+    }
 
-  CREATE TABLE IF NOT EXISTS project_members (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    added_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE(project_id, user_id)
-  );
-`);
+    // Make walid and admin users admins if they exist
+    try {
+      await client.query(`UPDATE users SET is_admin = 1 WHERE username IN ($1, $2)`, ['walid', 'admin']);
+    } catch (error) {
+      // Users don't exist yet, will be set during initialization
+    }
 
-// Add is_admin column if it doesn't exist (migration for existing databases)
-try {
-  db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
-  console.log('Added is_admin column to users table');
-} catch (error) {
-  // Column already exists, ignore error
+    // Initialize demo data if database is empty
+    const userCount = await client.query('SELECT COUNT(*) as count FROM users');
+
+    if (parseInt(userCount.rows[0].count) === 0) {
+      console.log('Initializing database with demo data...');
+
+      const adminHash = await hashPassword('password123');
+      const demoHash = await hashPassword('password123');
+
+      // Insert demo users
+      await client.query(`
+        INSERT INTO users (username, password, is_admin, created_at)
+        VALUES ($1, $2, $3, NOW())
+      `, ['admin', adminHash, 1]);
+
+      await client.query(`
+        INSERT INTO users (username, password, created_at)
+        VALUES ($1, $2, NOW())
+      `, ['demo', demoHash]);
+
+      // Insert demo projects
+      await client.query(`
+        INSERT INTO projects (name, description, creator_id, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+      `, ['Personal', 'Personal tasks and projects', 1]);
+
+      await client.query(`
+        INSERT INTO projects (name, description, creator_id, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+      `, ['Work', 'Work-related tasks', 1]);
+
+      console.log('Demo users created: admin/password123 and demo/password123');
+      console.log('Demo projects created: Personal and Work');
+    }
+  } finally {
+    client.release();
+  }
 }
 
-// Make walid and admin users admins if they exist
-try {
-  db.prepare(`UPDATE users SET is_admin = 1 WHERE username IN (?, ?)`).run('walid', 'admin');
-} catch (error) {
-  // Users don't exist yet, will be set during initialization
-}
+initializeDatabase().catch(console.error);
 
 async function hashPassword(password) {
   return await bcrypt.hash(password, 10);
@@ -80,95 +120,51 @@ async function verifyPassword(password, hash) {
   return await bcrypt.compare(password, hash);
 }
 
-// Initialize demo data if database is empty
-async function initializeData() {
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-
-  if (userCount === 0) {
-    console.log('Initializing database with demo data...');
-
-    const adminHash = await hashPassword('password123');
-    const demoHash = await hashPassword('password123');
-
-    // Insert demo users
-    db.prepare(`
-      INSERT INTO users (username, password, created_at)
-      VALUES (?, ?, ?)
-    `).run('admin', adminHash, new Date().toISOString());
-
-    db.prepare(`
-      INSERT INTO users (username, password, created_at)
-      VALUES (?, ?, ?)
-    `).run('demo', demoHash, new Date().toISOString());
-
-    // Insert demo projects
-    db.prepare(`
-      INSERT INTO projects (name, description, creator_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run('Personal', 'Personal tasks and projects', 1, new Date().toISOString(), new Date().toISOString());
-
-    db.prepare(`
-      INSERT INTO projects (name, description, creator_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run('Work', 'Work-related tasks', 1, new Date().toISOString(), new Date().toISOString());
-
-    console.log('Demo users created: admin/password123 and demo/password123');
-    console.log('Demo projects created: Personal and Work');
-  }
-}
-
-initializeData();
-
 export const dbApi = {
-  createUser: (username, password) => {
-    const result = db.prepare(`
+  createUser: async (username, password) => {
+    const result = await pool.query(`
       INSERT INTO users (username, password, created_at)
-      VALUES (?, ?, ?)
-    `).run(username, password, new Date().toISOString());
+      VALUES ($1, $2, NOW())
+      RETURNING id
+    `, [username, password]);
 
-    return { lastInsertRowid: result.lastInsertRowid };
+    return { lastInsertRowid: result.rows[0].id };
   },
 
-  getUserByUsername: (username) => {
-    return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  getUserByUsername: async (username) => {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    return result.rows[0];
   },
 
-  getAllUsers: () => {
-    return db.prepare('SELECT id, username, created_at FROM users').all();
+  getAllUsers: async () => {
+    const result = await pool.query('SELECT id, username, created_at FROM users');
+    return result.rows;
   },
 
-  createTodo: (title, description, status, deadline, creatorId, projectId) => {
-    const result = db.prepare(`
+  createTodo: async (title, description, status, deadline, creatorId, projectId) => {
+    const result = await pool.query(`
       INSERT INTO todos (title, description, status, deadline, creator_id, project_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      title,
-      description,
-      status,
-      deadline,
-      creatorId,
-      projectId,
-      new Date().toISOString(),
-      new Date().toISOString()
-    );
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      RETURNING id
+    `, [title, description, status, deadline, creatorId, projectId]);
 
-    return { lastInsertRowid: result.lastInsertRowid };
+    return { lastInsertRowid: result.rows[0].id };
   },
 
-  updateTodo: (title, description, status, deadline, projectId, id) => {
-    db.prepare(`
+  updateTodo: async (title, description, status, deadline, projectId, id) => {
+    await pool.query(`
       UPDATE todos
-      SET title = ?, description = ?, status = ?, deadline = ?, project_id = ?, updated_at = ?
-      WHERE id = ?
-    `).run(title, description, status, deadline, projectId, new Date().toISOString(), id);
+      SET title = $1, description = $2, status = $3, deadline = $4, project_id = $5, updated_at = NOW()
+      WHERE id = $6
+    `, [title, description, status, deadline, projectId, id]);
   },
 
-  deleteTodo: (id) => {
-    db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+  deleteTodo: async (id) => {
+    await pool.query('DELETE FROM todos WHERE id = $1', [id]);
   },
 
-  getTodos: (userId) => {
-    const todos = db.prepare(`
+  getTodos: async (userId) => {
+    const result = await pool.query(`
       SELECT
         t.*,
         u.username as creator_name,
@@ -176,15 +172,15 @@ export const dbApi = {
       FROM todos t
       LEFT JOIN users u ON t.creator_id = u.id
       LEFT JOIN projects p ON t.project_id = p.id
-      WHERE t.creator_id = ?
+      WHERE t.creator_id = $1
       ORDER BY t.created_at DESC
-    `).all(userId);
+    `, [userId]);
 
-    return todos;
+    return result.rows;
   },
 
-  getTodoById: (id) => {
-    return db.prepare(`
+  getTodoById: async (id) => {
+    const result = await pool.query(`
       SELECT
         t.*,
         u.username as creator_name,
@@ -192,12 +188,14 @@ export const dbApi = {
       FROM todos t
       LEFT JOIN users u ON t.creator_id = u.id
       LEFT JOIN projects p ON t.project_id = p.id
-      WHERE t.id = ?
-    `).get(id);
+      WHERE t.id = $1
+    `, [id]);
+
+    return result.rows[0];
   },
 
-  getTodosByProject: (projectId) => {
-    return db.prepare(`
+  getTodosByProject: async (projectId) => {
+    const result = await pool.query(`
       SELECT
         t.*,
         u.username as creator_name,
@@ -205,87 +203,83 @@ export const dbApi = {
       FROM todos t
       LEFT JOIN users u ON t.creator_id = u.id
       LEFT JOIN projects p ON t.project_id = p.id
-      WHERE t.project_id = ?
+      WHERE t.project_id = $1
       ORDER BY t.created_at DESC
-    `).all(projectId);
+    `, [projectId]);
+
+    return result.rows;
   },
 
-  createProject: (name, description, creatorId) => {
-    const result = db.prepare(`
+  createProject: async (name, description, creatorId) => {
+    const result = await pool.query(`
       INSERT INTO projects (name, description, creator_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      name,
-      description,
-      creatorId,
-      new Date().toISOString(),
-      new Date().toISOString()
-    );
+      VALUES ($1, $2, $3, NOW(), NOW())
+      RETURNING id
+    `, [name, description, creatorId]);
 
-    return { lastInsertRowid: result.lastInsertRowid };
+    return { lastInsertRowid: result.rows[0].id };
   },
 
-  updateProject: (name, description, id) => {
-    db.prepare(`
+  updateProject: async (name, description, id) => {
+    await pool.query(`
       UPDATE projects
-      SET name = ?, description = ?, updated_at = ?
-      WHERE id = ?
-    `).run(name, description, new Date().toISOString(), id);
+      SET name = $1, description = $2, updated_at = NOW()
+      WHERE id = $3
+    `, [name, description, id]);
   },
 
-  deleteProject: (id) => {
-    // Foreign key constraint will automatically set project_id to NULL in todos
-    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  deleteProject: async (id) => {
+    await pool.query('DELETE FROM projects WHERE id = $1', [id]);
   },
 
-  getProjects: (userId) => {
-    const projects = db.prepare(`
+  getProjects: async (userId) => {
+    const result = await pool.query(`
       SELECT DISTINCT
         p.*,
         u.username as creator_name,
         (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count,
-        CASE WHEN p.creator_id = ? THEN 1 ELSE 0 END as is_owner
+        CASE WHEN p.creator_id = $1 THEN 1 ELSE 0 END as is_owner
       FROM projects p
       LEFT JOIN users u ON p.creator_id = u.id
       LEFT JOIN project_members pm ON p.id = pm.project_id
-      WHERE p.creator_id = ? OR pm.user_id = ?
+      WHERE p.creator_id = $1 OR pm.user_id = $1
       ORDER BY p.created_at ASC
-    `).all(userId, userId, userId);
+    `, [userId]);
 
-    return projects;
+    return result.rows;
   },
 
-  getProjectById: (id) => {
-    const project = db.prepare(`
+  getProjectById: async (id) => {
+    const result = await pool.query(`
       SELECT
         p.*,
         u.username as creator_name,
         (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count
       FROM projects p
       LEFT JOIN users u ON p.creator_id = u.id
-      WHERE p.id = ?
-    `).get(id);
+      WHERE p.id = $1
+    `, [id]);
 
-    return project;
+    return result.rows[0];
   },
 
   // Admin functions
-  getDatabaseStats: () => {
-    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-    const projectCount = db.prepare('SELECT COUNT(*) as count FROM projects').get().count;
-    const todoCount = db.prepare('SELECT COUNT(*) as count FROM todos').get().count;
-    const completedTodoCount = db.prepare('SELECT COUNT(*) as count FROM todos WHERE status = ?').get('completed').count;
+  getDatabaseStats: async () => {
+    const userCount = await pool.query('SELECT COUNT(*) as count FROM users');
+    const projectCount = await pool.query('SELECT COUNT(*) as count FROM projects');
+    const todoCount = await pool.query('SELECT COUNT(*) as count FROM todos');
+    const completedTodoCount = await pool.query("SELECT COUNT(*) as count FROM todos WHERE status = 'completed'");
 
     return {
-      users: userCount,
-      projects: projectCount,
-      todos: todoCount,
-      completedTodos: completedTodoCount
+      users: parseInt(userCount.rows[0].count),
+      projects: parseInt(projectCount.rows[0].count),
+      todos: parseInt(todoCount.rows[0].count),
+      completedTodos: parseInt(completedTodoCount.rows[0].count)
     };
   },
 
-  getAllUsersWithStats: () => {
-    return db.prepare(`
+  getAllUsersWithStats: async () => {
+    const result = await pool.query(`
       SELECT
         u.id,
         u.username,
@@ -295,11 +289,13 @@ export const dbApi = {
         (SELECT COUNT(*) FROM todos WHERE creator_id = u.id) as todo_count
       FROM users u
       ORDER BY u.created_at DESC
-    `).all();
+    `);
+
+    return result.rows;
   },
 
-  getAllProjectsForAdmin: () => {
-    return db.prepare(`
+  getAllProjectsForAdmin: async () => {
+    const result = await pool.query(`
       SELECT
         p.*,
         u.username as creator_name,
@@ -307,11 +303,13 @@ export const dbApi = {
       FROM projects p
       LEFT JOIN users u ON p.creator_id = u.id
       ORDER BY p.created_at DESC
-    `).all();
+    `);
+
+    return result.rows;
   },
 
-  getAllTodosForAdmin: () => {
-    return db.prepare(`
+  getAllTodosForAdmin: async () => {
+    const result = await pool.query(`
       SELECT
         t.*,
         u.username as creator_name,
@@ -320,62 +318,67 @@ export const dbApi = {
       LEFT JOIN users u ON t.creator_id = u.id
       LEFT JOIN projects p ON t.project_id = p.id
       ORDER BY t.created_at DESC
-    `).all();
+    `);
+
+    return result.rows;
   },
 
-  updateUserAdminStatus: (userId, isAdmin) => {
-    db.prepare(`UPDATE users SET is_admin = ? WHERE id = ?`).run(isAdmin, userId);
+  updateUserAdminStatus: async (userId, isAdmin) => {
+    await pool.query(`UPDATE users SET is_admin = $1 WHERE id = $2`, [isAdmin, userId]);
   },
 
   // Project sharing functions
-  addProjectMember: (projectId, userId) => {
-    const result = db.prepare(`
+  addProjectMember: async (projectId, userId) => {
+    const result = await pool.query(`
       INSERT INTO project_members (project_id, user_id, added_at)
-      VALUES (?, ?, ?)
-    `).run(projectId, userId, new Date().toISOString());
+      VALUES ($1, $2, NOW())
+      RETURNING id
+    `, [projectId, userId]);
 
-    return { lastInsertRowid: result.lastInsertRowid };
+    return { lastInsertRowid: result.rows[0].id };
   },
 
-  removeProjectMember: (projectId, userId) => {
-    db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(projectId, userId);
+  removeProjectMember: async (projectId, userId) => {
+    await pool.query('DELETE FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, userId]);
   },
 
-  getProjectMembers: (projectId) => {
-    return db.prepare(`
+  getProjectMembers: async (projectId) => {
+    const result = await pool.query(`
       SELECT
         pm.*,
         u.username,
         u.id as user_id
       FROM project_members pm
       JOIN users u ON pm.user_id = u.id
-      WHERE pm.project_id = ?
+      WHERE pm.project_id = $1
       ORDER BY pm.added_at ASC
-    `).all(projectId);
+    `, [projectId]);
+
+    return result.rows;
   },
 
-  isProjectMember: (projectId, userId) => {
-    const result = db.prepare(`
+  isProjectMember: async (projectId, userId) => {
+    const result = await pool.query(`
       SELECT COUNT(*) as count
       FROM project_members
-      WHERE project_id = ? AND user_id = ?
-    `).get(projectId, userId);
+      WHERE project_id = $1 AND user_id = $2
+    `, [projectId, userId]);
 
-    return result.count > 0;
+    return parseInt(result.rows[0].count) > 0;
   },
 
-  hasProjectAccess: (projectId, userId) => {
-    const project = db.prepare('SELECT creator_id FROM projects WHERE id = ?').get(projectId);
-    if (!project) return false;
-    if (project.creator_id === userId) return true;
+  hasProjectAccess: async (projectId, userId) => {
+    const projectResult = await pool.query('SELECT creator_id FROM projects WHERE id = $1', [projectId]);
+    if (!projectResult.rows[0]) return false;
+    if (projectResult.rows[0].creator_id === userId) return true;
 
-    const isMember = db.prepare(`
+    const memberResult = await pool.query(`
       SELECT COUNT(*) as count
       FROM project_members
-      WHERE project_id = ? AND user_id = ?
-    `).get(projectId, userId);
+      WHERE project_id = $1 AND user_id = $2
+    `, [projectId, userId]);
 
-    return isMember.count > 0;
+    return parseInt(memberResult.rows[0].count) > 0;
   }
 };
 
