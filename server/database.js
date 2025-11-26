@@ -18,6 +18,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
   );
 
@@ -45,6 +46,21 @@ db.exec(`
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
   );
 `);
+
+// Add is_admin column if it doesn't exist (migration for existing databases)
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
+  console.log('Added is_admin column to users table');
+} catch (error) {
+  // Column already exists, ignore error
+}
+
+// Make walid an admin if they exist
+try {
+  db.prepare(`UPDATE users SET is_admin = 1 WHERE username = ?`).run('walid');
+} catch (error) {
+  // User doesn't exist yet, will be set during initialization
+}
 
 async function hashPassword(password) {
   return await bcrypt.hash(password, 10);
@@ -239,6 +255,64 @@ export const dbApi = {
     `).get(id);
 
     return project;
+  },
+
+  // Admin functions
+  getDatabaseStats: () => {
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    const projectCount = db.prepare('SELECT COUNT(*) as count FROM projects').get().count;
+    const todoCount = db.prepare('SELECT COUNT(*) as count FROM todos').get().count;
+    const completedTodoCount = db.prepare('SELECT COUNT(*) as count FROM todos WHERE status = ?').get('completed').count;
+
+    return {
+      users: userCount,
+      projects: projectCount,
+      todos: todoCount,
+      completedTodos: completedTodoCount
+    };
+  },
+
+  getAllUsersWithStats: () => {
+    return db.prepare(`
+      SELECT
+        u.id,
+        u.username,
+        u.is_admin,
+        u.created_at,
+        (SELECT COUNT(*) FROM projects WHERE creator_id = u.id) as project_count,
+        (SELECT COUNT(*) FROM todos WHERE creator_id = u.id) as todo_count
+      FROM users u
+      ORDER BY u.created_at DESC
+    `).all();
+  },
+
+  getAllProjectsForAdmin: () => {
+    return db.prepare(`
+      SELECT
+        p.*,
+        u.username as creator_name,
+        (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count
+      FROM projects p
+      LEFT JOIN users u ON p.creator_id = u.id
+      ORDER BY p.created_at DESC
+    `).all();
+  },
+
+  getAllTodosForAdmin: () => {
+    return db.prepare(`
+      SELECT
+        t.*,
+        u.username as creator_name,
+        p.name as project_name
+      FROM todos t
+      LEFT JOIN users u ON t.creator_id = u.id
+      LEFT JOIN projects p ON t.project_id = p.id
+      ORDER BY t.created_at DESC
+    `).all();
+  },
+
+  updateUserAdminStatus: (userId, isAdmin) => {
+    db.prepare(`UPDATE users SET is_admin = ? WHERE id = ?`).run(isAdmin, userId);
   }
 };
 

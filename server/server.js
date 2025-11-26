@@ -28,6 +28,26 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+const authenticateAdmin = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    if (!user.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -65,12 +85,12 @@ app.post('/api/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, username: user.username },
+      { id: user.id, username: user.username, isAdmin: user.is_admin },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ token, user: { id: user.id, username: user.username } });
+    res.json({ token, user: { id: user.id, username: user.username, isAdmin: user.is_admin } });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -220,6 +240,53 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
   try {
     db.deleteProject(req.params.id);
     res.json({ message: 'Project deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin endpoints
+app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
+  try {
+    const stats = db.getDatabaseStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/users', authenticateAdmin, (req, res) => {
+  try {
+    const users = db.getAllUsersWithStats();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/projects', authenticateAdmin, (req, res) => {
+  try {
+    const projects = db.getAllProjectsForAdmin();
+    res.json(projects);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/todos', authenticateAdmin, (req, res) => {
+  try {
+    const todos = db.getAllTodosForAdmin();
+    res.json(todos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/admin/users/:id/admin', authenticateAdmin, (req, res) => {
+  try {
+    const { isAdmin } = req.body;
+    db.updateUserAdminStatus(req.params.id, isAdmin ? 1 : 0);
+    res.json({ message: 'User admin status updated successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

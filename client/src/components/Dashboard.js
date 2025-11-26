@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import TodoList from './TodoList';
 import TodoModal from './TodoModal';
 import ProjectModal from './ProjectModal';
+import AdminDashboard from './AdminDashboard';
 import { API_URL } from '../config';
 
 function Dashboard({ user, token, onLogout }) {
@@ -11,6 +12,7 @@ function Dashboard({ user, token, onLogout }) {
   const [selectedProject, setSelectedProject] = useState('all');
   const [isTodoModalOpen, setIsTodoModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
 
@@ -184,9 +186,20 @@ function Dashboard({ user, token, onLogout }) {
       <div className="main-content">
         <div className="content-header">
           <h2>{getCurrentViewTitle()}</h2>
-          <button className="btn-primary" onClick={handleCreateTodo}>
-            + New Todo
-          </button>
+          <div className="header-actions">
+            {user.isAdmin && (
+              <button
+                className="btn-admin"
+                onClick={() => setIsAdminDashboardOpen(true)}
+                style={{ marginRight: '12px' }}
+              >
+                Admin Dashboard
+              </button>
+            )}
+            <button className="btn-primary" onClick={handleCreateTodo}>
+              + New Todo
+            </button>
+          </div>
         </div>
         <div className="content-body">
           <TodoList
@@ -209,6 +222,12 @@ function Dashboard({ user, token, onLogout }) {
           project={editingProject}
           onSave={handleSaveProject}
           onClose={() => setIsProjectModalOpen(false)}
+        />
+      )}
+      {isAdminDashboardOpen && (
+        <AdminDashboard
+          token={token}
+          onClose={() => setIsAdminDashboardOpen(false)}
         />
       )}
     </>
