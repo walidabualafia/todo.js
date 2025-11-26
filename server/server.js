@@ -292,6 +292,31 @@ app.put('/api/admin/users/:id/admin', authenticateAdmin, (req, res) => {
   }
 });
 
+// Emergency endpoint to bootstrap first admin - REMOVE AFTER USE
+app.post('/api/bootstrap-admin', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Verify credentials
+    const user = db.getUserByUsername(username);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const validPassword = await verifyPassword(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Make this user an admin
+    db.updateUserAdminStatus(user.id, 1);
+
+    res.json({ message: 'Admin access granted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
