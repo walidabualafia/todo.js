@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import bloomLogo from '../bloom.svg';
 import { API_URL } from '../config';
+import './Login.css';
 
 function Login({ onLogin }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -42,6 +43,32 @@ function Login({ onLogin }) {
 
   return (
     <div className="login-container">
+      <div className="login-illustration">
+        <div className="task-animation">
+          <div className="task-item completed">
+            <div className="checkbox checked">✓</div>
+            <div className="task-line"></div>
+          </div>
+          <div className="task-item completed">
+            <div className="checkbox checked">✓</div>
+            <div className="task-line"></div>
+          </div>
+          <div className="task-item active">
+            <div className="checkbox"></div>
+            <div className="task-line"></div>
+          </div>
+          <div className="task-item">
+            <div className="checkbox"></div>
+            <div className="task-line"></div>
+          </div>
+          <div className="task-item">
+            <div className="checkbox"></div>
+            <div className="task-line"></div>
+          </div>
+        </div>
+        <h1 className="tagline">Organize. Plan. Bloom.</h1>
+        <p className="subtitle">Your projects, beautifully managed</p>
+      </div>
       <div className="login-box">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
           <img src={bloomLogo} alt="Bloom" style={{ width: '48px', height: '48px' }} />
@@ -82,9 +109,6 @@ function Login({ onLogin }) {
         >
           {isRegister ? 'Already have an account? Sign In' : 'Create New Account'}
         </button>
-        <div style={{ marginTop: '20px', fontSize: '13px', color: '#616061', textAlign: 'center' }}>
-          Demo credentials: admin/password123 or demo/password123
-        </div>
       </div>
     </div>
   );
