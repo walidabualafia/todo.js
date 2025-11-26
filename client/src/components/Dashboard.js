@@ -187,7 +187,7 @@ function Dashboard({ user, token, onLogout }) {
         <div className="content-header">
           <h2>{getCurrentViewTitle()}</h2>
           <div className="header-actions">
-            {user.isAdmin && (
+            {user?.isAdmin === 1 && (
               <button
                 className="btn-admin"
                 onClick={() => setIsAdminDashboardOpen(true)}
