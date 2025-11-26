@@ -55,11 +55,11 @@ try {
   // Column already exists, ignore error
 }
 
-// Make walid an admin if they exist
+// Make walid and admin users admins if they exist
 try {
-  db.prepare(`UPDATE users SET is_admin = 1 WHERE username = ?`).run('walid');
+  db.prepare(`UPDATE users SET is_admin = 1 WHERE username IN (?, ?)`).run('walid', 'admin');
 } catch (error) {
-  // User doesn't exist yet, will be set during initialization
+  // Users don't exist yet, will be set during initialization
 }
 
 async function hashPassword(password) {
