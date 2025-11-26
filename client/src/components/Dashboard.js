@@ -4,6 +4,7 @@ import TodoList from './TodoList';
 import TodoModal from './TodoModal';
 import ProjectModal from './ProjectModal';
 import AdminDashboard from './AdminDashboard';
+import ShareProjectModal from './ShareProjectModal';
 import { API_URL } from '../config';
 
 function Dashboard({ user, token, onLogout }) {
@@ -13,8 +14,10 @@ function Dashboard({ user, token, onLogout }) {
   const [isTodoModalOpen, setIsTodoModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
+  const [sharingProject, setSharingProject] = useState(null);
 
   const fetchTodos = useCallback(async () => {
     try {
@@ -73,6 +76,11 @@ function Dashboard({ user, token, onLogout }) {
   const handleEditProject = (project) => {
     setEditingProject(project);
     setIsProjectModalOpen(true);
+  };
+
+  const handleShareProject = (project) => {
+    setSharingProject(project);
+    setIsShareModalOpen(true);
   };
 
   const handleDeleteTodo = async (todoId) => {
@@ -182,6 +190,7 @@ function Dashboard({ user, token, onLogout }) {
         onCreateProject={handleCreateProject}
         onEditProject={handleEditProject}
         onDeleteProject={handleDeleteProject}
+        onShareProject={handleShareProject}
       />
       <div className="main-content">
         <div className="content-header">
@@ -228,6 +237,16 @@ function Dashboard({ user, token, onLogout }) {
         <AdminDashboard
           token={token}
           onClose={() => setIsAdminDashboardOpen(false)}
+        />
+      )}
+      {isShareModalOpen && sharingProject && (
+        <ShareProjectModal
+          project={sharingProject}
+          token={token}
+          onClose={() => {
+            setIsShareModalOpen(false);
+            setSharingProject(null);
+          }}
         />
       )}
     </>

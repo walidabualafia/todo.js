@@ -245,6 +245,75 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
   }
 });
 
+// Project sharing endpoints
+app.get('/api/projects/:id/members', authenticateToken, (req, res) => {
+  try {
+    const projectId = req.params.id;
+
+    // Check if user has access to this project
+    if (!db.hasProjectAccess(projectId, req.user.id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const members = db.getProjectMembers(projectId);
+    res.json(members);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/projects/:id/members', authenticateToken, (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { username } = req.body;
+
+    // Check if user is the project owner
+    const project = db.getProjectById(projectId);
+    if (!project || project.creator_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only project owner can add members' });
+    }
+
+    // Get user by username
+    const userToAdd = db.getUserByUsername(username);
+    if (!userToAdd) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Don't add owner as member
+    if (userToAdd.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot add yourself as a member' });
+    }
+
+    // Check if already a member
+    if (db.isProjectMember(projectId, userToAdd.id)) {
+      return res.status(400).json({ error: 'User is already a member' });
+    }
+
+    db.addProjectMember(projectId, userToAdd.id);
+    res.json({ message: 'Member added successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/projects/:id/members/:userId', authenticateToken, (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const userId = parseInt(req.params.userId);
+
+    // Check if user is the project owner
+    const project = db.getProjectById(projectId);
+    if (!project || project.creator_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only project owner can remove members' });
+    }
+
+    db.removeProjectMember(projectId, userId);
+    res.json({ message: 'Member removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Admin endpoints
 app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
   try {

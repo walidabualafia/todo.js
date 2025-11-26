@@ -45,6 +45,16 @@ db.exec(`
     FOREIGN KEY (creator_id) REFERENCES users(id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
   );
+
+  CREATE TABLE IF NOT EXISTS project_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    added_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(project_id, user_id)
+  );
 `);
 
 // Add is_admin column if it doesn't exist (migration for existing databases)
@@ -230,15 +240,17 @@ export const dbApi = {
 
   getProjects: (userId) => {
     const projects = db.prepare(`
-      SELECT
+      SELECT DISTINCT
         p.*,
         u.username as creator_name,
-        (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count
+        (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count,
+        CASE WHEN p.creator_id = ? THEN 1 ELSE 0 END as is_owner
       FROM projects p
       LEFT JOIN users u ON p.creator_id = u.id
-      WHERE p.creator_id = ?
+      LEFT JOIN project_members pm ON p.id = pm.project_id
+      WHERE p.creator_id = ? OR pm.user_id = ?
       ORDER BY p.created_at ASC
-    `).all(userId);
+    `).all(userId, userId, userId);
 
     return projects;
   },
@@ -313,6 +325,57 @@ export const dbApi = {
 
   updateUserAdminStatus: (userId, isAdmin) => {
     db.prepare(`UPDATE users SET is_admin = ? WHERE id = ?`).run(isAdmin, userId);
+  },
+
+  // Project sharing functions
+  addProjectMember: (projectId, userId) => {
+    const result = db.prepare(`
+      INSERT INTO project_members (project_id, user_id, added_at)
+      VALUES (?, ?, ?)
+    `).run(projectId, userId, new Date().toISOString());
+
+    return { lastInsertRowid: result.lastInsertRowid };
+  },
+
+  removeProjectMember: (projectId, userId) => {
+    db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(projectId, userId);
+  },
+
+  getProjectMembers: (projectId) => {
+    return db.prepare(`
+      SELECT
+        pm.*,
+        u.username,
+        u.id as user_id
+      FROM project_members pm
+      JOIN users u ON pm.user_id = u.id
+      WHERE pm.project_id = ?
+      ORDER BY pm.added_at ASC
+    `).all(projectId);
+  },
+
+  isProjectMember: (projectId, userId) => {
+    const result = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM project_members
+      WHERE project_id = ? AND user_id = ?
+    `).get(projectId, userId);
+
+    return result.count > 0;
+  },
+
+  hasProjectAccess: (projectId, userId) => {
+    const project = db.prepare('SELECT creator_id FROM projects WHERE id = ?').get(projectId);
+    if (!project) return false;
+    if (project.creator_id === userId) return true;
+
+    const isMember = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM project_members
+      WHERE project_id = ? AND user_id = ?
+    `).get(projectId, userId);
+
+    return isMember.count > 0;
   }
 };
 

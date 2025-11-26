@@ -9,7 +9,8 @@ function Sidebar({
   onSelectProject,
   onCreateProject,
   onEditProject,
-  onDeleteProject
+  onDeleteProject,
+  onShareProject
 }) {
   return (
     <div className="sidebar">
@@ -66,42 +67,66 @@ function Sidebar({
                 )}
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  className="btn-icon-small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditProject(project);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#b8b8b8',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    padding: '2px 4px'
-                  }}
-                  title="Edit project"
-                >
-                  ✎
-                </button>
-                <button
-                  className="btn-icon-small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteProject(project.id);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#b8b8b8',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    padding: '2px 4px'
-                  }}
-                  title="Delete project"
-                >
-                  ✕
-                </button>
+                {project.is_owner && (
+                  <button
+                    className="btn-icon-small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShareProject(project);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#b8b8b8',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '2px 4px'
+                    }}
+                    title="Share project"
+                  >
+                    👥
+                  </button>
+                )}
+                {project.is_owner && (
+                  <button
+                    className="btn-icon-small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditProject(project);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#b8b8b8',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '2px 4px'
+                    }}
+                    title="Edit project"
+                  >
+                    ✎
+                  </button>
+                )}
+                {project.is_owner && (
+                  <button
+                    className="btn-icon-small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteProject(project.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#b8b8b8',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '2px 4px'
+                    }}
+                    title="Delete project"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
           ))}
