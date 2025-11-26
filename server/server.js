@@ -367,7 +367,7 @@ app.post('/api/bootstrap-admin', async (req, res) => {
     const { username, password } = req.body;
 
     // Verify credentials
-    const user = db.getUserByUsername(username);
+    const user = await db.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -378,9 +378,37 @@ app.post('/api/bootstrap-admin', async (req, res) => {
     }
 
     // Make this user an admin
-    db.updateUserAdminStatus(user.id, 1);
+    await db.updateUserAdminStatus(user.id, 1);
 
     res.json({ message: 'Admin access granted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Emergency endpoint to reset password - REMOVE AFTER USE
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { username, newPassword } = req.body;
+
+    const user = await db.getUserByUsername(username);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password directly in database
+    const { Pool } = await import('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    await pool.query('UPDATE users SET password = $1 WHERE username = $2', [hashedPassword, username]);
+    await pool.end();
+
+    res.json({ message: 'Password reset successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
