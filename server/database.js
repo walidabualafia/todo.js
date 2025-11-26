@@ -141,7 +141,7 @@ export const dbApi = {
     db.prepare('DELETE FROM todos WHERE id = ?').run(id);
   },
 
-  getTodos: () => {
+  getTodos: (userId) => {
     const todos = db.prepare(`
       SELECT
         t.*,
@@ -150,8 +150,9 @@ export const dbApi = {
       FROM todos t
       LEFT JOIN users u ON t.creator_id = u.id
       LEFT JOIN projects p ON t.project_id = p.id
+      WHERE t.creator_id = ?
       ORDER BY t.created_at DESC
-    `).all();
+    `).all(userId);
 
     return todos;
   },
@@ -211,7 +212,7 @@ export const dbApi = {
     db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   },
 
-  getProjects: () => {
+  getProjects: (userId) => {
     const projects = db.prepare(`
       SELECT
         p.*,
@@ -219,8 +220,9 @@ export const dbApi = {
         (SELECT COUNT(*) FROM todos WHERE project_id = p.id) as todo_count
       FROM projects p
       LEFT JOIN users u ON p.creator_id = u.id
+      WHERE p.creator_id = ?
       ORDER BY p.created_at ASC
-    `).all();
+    `).all(userId);
 
     return projects;
   },

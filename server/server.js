@@ -87,7 +87,7 @@ app.get('/api/users', authenticateToken, (req, res) => {
 
 app.get('/api/todos', authenticateToken, (req, res) => {
   try {
-    const todos = db.getTodos();
+    const todos = db.getTodos(req.user.id);
     res.json(todos);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -157,7 +157,7 @@ app.delete('/api/todos/:id', authenticateToken, (req, res) => {
 
 app.get('/api/projects', authenticateToken, (req, res) => {
   try {
-    const projects = db.getProjects();
+    const projects = db.getProjects(req.user.id);
     res.json(projects);
   } catch (error) {
     res.status(500).json({ error: error.message });
