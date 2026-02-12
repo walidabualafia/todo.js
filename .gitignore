@@ -1,7 +1,9 @@
 # Go
 bin/
-bloom
-bloom.db
+/bloom
+*.db
+*.db-shm
+*.db-wal
 *.exe
 
 # Frontend
