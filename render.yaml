@@ -9,14 +9,18 @@ services:
       - key: PORT
         value: "8080"
       - key: DB_DRIVER
-        value: sqlite
+        value: postgres
       - key: DATABASE_URL
-        value: /home/bloom/data/bloom.db
+        fromDatabase:
+          name: bloom-db
+          property: connectionURI
       - key: ENVIRONMENT
         value: production
       - key: JWT_SECRET
         generateValue: true
-    disk:
-      name: bloom-data
-      mountPath: /home/bloom/data
-      sizeGB: 1
+
+databases:
+  - name: bloom-db
+    plan: free
+    databaseName: bloom
+    user: bloom
