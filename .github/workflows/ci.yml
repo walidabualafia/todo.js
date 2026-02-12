@@ -20,6 +20,9 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Ensure embed placeholder exists
+        run: mkdir -p web/dist && touch web/dist/placeholder
+
       - name: Run tests
         run: go test -v -race -count=1 ./...
 

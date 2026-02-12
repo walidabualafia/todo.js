@@ -6,7 +6,7 @@ bloom.db
 
 # Frontend
 web/node_modules/
-web/dist/
+web/dist/*
 !web/dist/placeholder
 
 # Dependencies

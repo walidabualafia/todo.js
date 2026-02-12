@@ -1,0 +1,2 @@
+This file exists so that go:embed can find the dist directory.
+In production, this directory is populated by: cd web && npm run build
