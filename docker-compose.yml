@@ -1,0 +1,31 @@
+services:
+  bloom:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DB_DRIVER=sqlite
+      - DATABASE_URL=/home/bloom/data/bloom.db
+      - JWT_SECRET=change-me-in-production
+      - ENVIRONMENT=production
+    volumes:
+      - bloom-data:/home/bloom/data
+    restart: unless-stopped
+
+  # Optional: PostgreSQL for production use
+  # Uncomment and set DB_DRIVER=postgres, DATABASE_URL accordingly
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: bloom
+  #     POSTGRES_USER: bloom
+  #     POSTGRES_PASSWORD: bloom
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+volumes:
+  bloom-data:
+  # pg-data:

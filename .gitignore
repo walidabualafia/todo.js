@@ -1,0 +1,34 @@
+# Go
+bin/
+bloom
+bloom.db
+*.exe
+
+# Frontend
+web/node_modules/
+web/dist/
+!web/dist/placeholder
+
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production.local
+
+# Old project files (to be removed)
+server/bloom.db
+
+# Misc
+.plan
